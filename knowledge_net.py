@@ -98,7 +98,7 @@ class KnowledgeRNN(nn.Module):
 criterion = nn.NLLLoss()
 #criterion = nn.CrossEntropyLoss()
 
-def train(model):
+def train(model, train_data):
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
@@ -154,38 +154,41 @@ def evaluate(data_source):
     return total_loss
 
 
-lr = 20
-best_val_loss = None
-epochs = 10
-#corpus = data.Corpus('./data/wikitext-103-raw/wiki.{0}.raw')
-corpus = data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')
-#corpus = Corpus('./wikitext-2-raw/wiki.{0}.raw')
-ntokens = len(corpus.dictionary)
-train_data = corpus.get_docs('train', device)
-# At any point you can hit Ctrl + C to break out of training early.
-try:
-    state_size = 10
-    input_embed_size = 10
-    model = KnowledgeRNN(ntokens, state_size, input_embed_size).to(device)
+def run(epochs=10, lr=20, corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')):
+    best_val_loss = None
+    #corpus = data.Corpus('./data/wikitext-103-raw/wiki.{0}.raw')
+    corpus = data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')
+    #corpus = Corpus('./wikitext-2-raw/wiki.{0}.raw')
+    ntokens = len(corpus.dictionary)
+    train_data = corpus.get_docs('train', device)
+    # At any point you can hit Ctrl + C to break out of training early.
+    try:
+        state_size = 10
+        input_embed_size = 10
+        model = KnowledgeRNN(ntokens, state_size, input_embed_size).to(device)
 
-    for epoch in range(1, epochs+1):
-        epoch_start_time = time.time()
-        train(model)
-        print('Running evaluation...')
-        val_loss = evaluate(corpus.get_docs('valid', device))
+        for epoch in range(1, epochs+1):
+            epoch_start_time = time.time()
+            train(model, train_data)
+            print('Running evaluation...')
+            val_loss = evaluate(corpus.get_docs('valid', device))
+            print('-' * 89)
+            print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
+                  'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
+                                             val_loss, math.exp(val_loss)))
+            print('-' * 89)
+            # Save the model if the validation loss is the best we've seen so far.
+            if not best_val_loss or val_loss < best_val_loss:
+                with open('model.pt', 'wb') as f:
+                    torch.save(model, f)
+                best_val_loss = val_loss
+            else:
+                # Anneal the learning rate if no improvement has been seen in the validation dataset.
+                lr /= 4.0
+    except KeyboardInterrupt:
         print('-' * 89)
-        print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
-                'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                           val_loss, math.exp(val_loss)))
-        print('-' * 89)
-        # Save the model if the validation loss is the best we've seen so far.
-        if not best_val_loss or val_loss < best_val_loss:
-            with open('model.pt', 'wb') as f:
-                torch.save(model, f)
-            best_val_loss = val_loss
-        else:
-            # Anneal the learning rate if no improvement has been seen in the validation dataset.
-            lr /= 4.0
-except KeyboardInterrupt:
-    print('-' * 89)
-    print('Exiting from training early')
+        print('Exiting from training early')
+
+
+if __name__ == '__main__':
+    run()
