@@ -23,6 +23,8 @@ class KnowledgeRNN(nn.Module):
                  state_size,
                  input_embed_size,
                  knowledge_base=None,
+                 value_size=80,
+                 query_size=40,
                  dropout=0.5):
         super(KnowledgeRNN, self).__init__()
 
@@ -33,7 +35,11 @@ class KnowledgeRNN(nn.Module):
         self.encoder = nn.Embedding(ntokens, input_embed_size)
 
         query_input_size = state_size + input_embed_size
-        self.query_net = kb.KnowledgeQueryNet(query_input_size, kb=knowledge_base)
+        self.query_net = kb.KnowledgeQueryNet(query_input_size,
+                                              hidden_size=query_input_size,
+                                              query_size=query_size,
+                                              value_size=value_size,
+                                              kb=knowledge_base)
         self.lstm_input_size = input_embed_size + self.query_net.value_size
 
         self.state_size = state_size
@@ -154,7 +160,13 @@ def evaluate(data_source):
     return total_loss
 
 
-def run(epochs=10, lr=20, corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')):
+def run(epochs=100,
+        state_size=50,
+        input_embed_size=100,
+        value_size=80,
+        query_size=40,
+        lr=20,
+        corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')):
     best_val_loss = None
     #corpus = data.Corpus('./data/wikitext-103-raw/wiki.{0}.raw')
     corpus = data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')
@@ -163,9 +175,11 @@ def run(epochs=10, lr=20, corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw
     train_data = corpus.get_docs('train', device)
     # At any point you can hit Ctrl + C to break out of training early.
     try:
-        state_size = 10
-        input_embed_size = 10
-        model = KnowledgeRNN(ntokens, state_size, input_embed_size).to(device)
+        model = KnowledgeRNN(ntokens,
+                             state_size,
+                             input_embed_size,
+                             value_size=value_size,
+                             query_size=query_size).to(device)
 
         for epoch in range(1, epochs+1):
             epoch_start_time = time.time()
@@ -191,4 +205,8 @@ def run(epochs=10, lr=20, corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw
 
 
 if __name__ == '__main__':
-    run()
+    run(epochs=2,
+        state_size=10,
+        input_embed_size=10,
+        query_size=10,
+        value_size=10)

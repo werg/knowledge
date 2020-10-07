@@ -11,7 +11,8 @@ class KnowledgeBase(object):
         self.storage = torch.randn([resolution for _ in range(query_size)] + [value_size])
 
         # shape: (resolution**query_size) x value_size
-        self.storage_flat_view = self.storage.view(resolution**query_size, value_size)
+        rows = resolution**query_size
+        self.storage_flat_view = self.storage.view(rows, value_size)
 
         # matrix that acts like a digit system for converting indices to flat view indices
         # dim:
@@ -62,7 +63,7 @@ class KnowledgeBase(object):
 
 
 class KnowledgeLayer(nn.Module):
-    def __init__(self, query_size=10, value_size=10, resolution=4, kb=None):
+    def __init__(self, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeLayer, self).__init__()
         self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
 
@@ -71,7 +72,7 @@ class KnowledgeLayer(nn.Module):
 
 
 class KnowledgeQueryNet(nn.Module):
-    def __init__(self, input_size, hidden_size=10, query_size=10, value_size=10, resolution=4, kb=None):
+    def __init__(self, input_size, hidden_size=50, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeQueryNet, self).__init__()
 
         self.knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
