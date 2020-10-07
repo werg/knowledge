@@ -1,9 +1,11 @@
 import torch
+import torch.nn as nn
 
 class KnowledgeBase(object):
     def __init__(self, query_size, value_size, resolution):
         self.query_size = query_size
         self.resolution = resolution
+        self.value_size = value_size
 
         # shape: resolution^query_size x value_size
         self.storage = torch.randn([resolution for _ in range(query_size)] + [value_size])
@@ -57,7 +59,39 @@ class KnowledgeBase(object):
     def grow_resolution(self):
         old_resolution = self.resolution
         self.resolution *= 2
-        
 
-# grow size iteratively / increase_resolutionn (interpolation)
-# store new values
+
+class KnowledgeLayer(nn.Module):
+    def __init__(self, query_size=10, value_size=10, resolution=4, kb=None):
+        super(KnowledgeLayer, self).__init__()
+        self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
+
+    def forward(self, query):
+        return self.kb.query(query)
+
+
+class KnowledgeQueryNet(nn.Module):
+    def __init__(self, input_size, hidden_size=10, query_size=10, value_size=10, resolution=4, kb=None):
+        super(KnowledgeQueryNet, self).__init__()
+
+        self.knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
+        self.model = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, query_size),
+            self.knowledge_layer)
+
+        self.value_size = self.knowledge_layer.kb.value_size
+
+    def forward(self, input):
+        return self.model(input)
+
+    def init_weights(self):
+        self.model.apply(init_weights)
+
+# TODO: handle batch slice
+initrange = 0.1
+def init_weights(m):
+    if type(m) == nn.Linear:
+        nn.init.zeros_(m.weight)
+        nn.init.uniform_(m.weight, -initrange, initrange)

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import gc
 import itertools
 import data
+import knowledge_base as kb
 
 torch.manual_seed(50)
 
@@ -13,19 +14,33 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # todo:
-# device, check backpropagating, batches, valid vs test
+# device, check backpropagating, batches, valid vs test, real optimizer
 
 
 class KnowledgeRNN(nn.Module):
-
-    def __init__(self, ntokens, state_size, input_embed_size, dropout=0.5):
+    def __init__(self,
+                 ntokens,
+                 state_size,
+                 input_embed_size,
+                 knowledge_base=None,
+                 dropout=0.5):
         super(KnowledgeRNN, self).__init__()
+
         self.ntokens = ntokens
         self.drop = nn.Dropout(dropout)
+
+        self.input_embed_size = input_embed_size
         self.encoder = nn.Embedding(ntokens, input_embed_size)
-        self.total_hidden_size = state_size
-        self.lstm_layer = nn.LSTMCell(input_embed_size, self.total_hidden_size)
-        self.decoder = nn.Linear(self.total_hidden_size, ntokens)
+
+        query_input_size = state_size + input_embed_size
+        self.query_net = kb.KnowledgeQueryNet(query_input_size, kb=knowledge_base)
+        self.lstm_input_size = input_embed_size + self.query_net.value_size
+
+        self.state_size = state_size
+        self.lstm_layer = nn.LSTMCell(self.lstm_input_size, self.state_size)
+
+        self.decoder_input_size = self.state_size + input_embed_size + self.query_net.value_size
+        self.decoder = nn.Linear(self.decoder_input_size, ntokens)
 
         self.init_weights()
 
@@ -34,24 +49,36 @@ class KnowledgeRNN(nn.Module):
         nn.init.uniform_(self.encoder.weight, -initrange, initrange)
         nn.init.zeros_(self.decoder.weight)
         nn.init.uniform_(self.decoder.weight, -initrange, initrange)
+        self.query_net.init_weights()
 
     def forward(self, input):
         batch_size=1
         # input = torch.randn(seqlength, batch_size, input_embed_size)
 
-        outputs = []
-        encoded = self.encoder(input)
-        emb = torch.unsqueeze(self.drop(encoded), 1)
+        lstm_states = []
+        kb_vals = []
+        encoded = self.drop(self.encoder(input))
+        emb = encoded.view(-1,1, self.input_embed_size)
 
         hx, cx = self.init_hidden()
         for i in emb:
-            hx, cx = self.lstm_layer(i, (hx, cx))
-            outputs.append(hx)
+            squeezed_hx = hx.view(self.state_size)
+            squeezed_i = i.view(self.input_embed_size)
+            query_val = self.query_net(torch.cat((squeezed_hx,
+                                                  squeezed_i)))
 
-        output = self.drop(torch.cat(outputs).to(device))
+            lstm_input = torch.cat((squeezed_i, query_val)).view(1,-1)
+            hx, cx = self.lstm_layer(lstm_input, (hx, cx))
+
+            lstm_states.append(squeezed_hx)
+            kb_vals.append(query_val)
+
+        lstm_output = self.drop(torch.cat(lstm_states).to(device)).view(-1, self.state_size)
+        kb_output = self.drop(torch.cat(kb_vals).to(device)).view(-1, self.query_net.value_size)
+        output = torch.cat((encoded, kb_output, lstm_output), dim=1)
         decoded = self.decoder(output)
 
-        decoded = decoded.view(-1, self.ntokens)
+        # decoded = decoded.view(-1, self.ntokens)
         return F.log_softmax(decoded, dim=1)
 
 
@@ -60,11 +87,11 @@ class KnowledgeRNN(nn.Module):
         # todo: investigate this thing
         weight = next(self.parameters())
 
-        return (weight.new_zeros(1, self.total_hidden_size),
-                weight.new_zeros(1, self.total_hidden_size))
+        return (weight.new_zeros(1, self.state_size),
+                weight.new_zeros(1, self.state_size))
 
-        #return (weight.new_zeros(1, 1, self.total_hidden_size),
-        #        weight.new_zeros(1, 1, self.total_hidden_size))
+        #return (weight.new_zeros(1, 1, self.state_size),
+        #        weight.new_zeros(1, 1, self.state_size))
 
 
 # we somehow need to tokenize and then
@@ -132,13 +159,13 @@ best_val_loss = None
 epochs = 10
 #corpus = data.Corpus('./data/wikitext-103-raw/wiki.{0}.raw')
 corpus = data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')
-corpus = Corpus('./wikitext-2-raw/wiki.{0}.raw')
+#corpus = Corpus('./wikitext-2-raw/wiki.{0}.raw')
 ntokens = len(corpus.dictionary)
 train_data = corpus.get_docs('train', device)
 # At any point you can hit Ctrl + C to break out of training early.
 try:
-    state_size = 100
-    input_embed_size = 50
+    state_size = 10
+    input_embed_size = 10
     model = KnowledgeRNN(ntokens, state_size, input_embed_size).to(device)
 
     for epoch in range(1, epochs+1):
