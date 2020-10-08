@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 
-class KnowledgeBase(object):
+class KnowledgeBase(nn.Module):
     def __init__(self, query_size, value_size, resolution):
+        super(KnowledgeBase, self).__init__()
         self.query_size = query_size
         self.resolution = resolution
         self.value_size = value_size
@@ -29,7 +30,7 @@ class KnowledgeBase(object):
 
         self.neighbor_map = torch.tensor(nm)
 
-    def query(self, query):
+    def forward(self, query):
         with torch.no_grad():
             base = torch.floor(query)
             # this is just base-wrapped, i.e. the values that "stick out" beyond the last index
@@ -68,7 +69,7 @@ class KnowledgeLayer(nn.Module):
         self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
 
     def forward(self, query):
-        return self.kb.query(query)
+        return self.kb(query)
 
 
 class KnowledgeQueryNet(nn.Module):
