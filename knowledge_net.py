@@ -107,7 +107,7 @@ class KnowledgeRNN(nn.Module):
 criterion = nn.NLLLoss()
 #criterion = nn.CrossEntropyLoss()
 
-def train(model, train_data):
+def train(model, train_data, lr):
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
@@ -185,7 +185,7 @@ def run(epochs=100,
 
         for epoch in range(1, epochs+1):
             epoch_start_time = time.time()
-            train(model, train_data)
+            train(model, train_data, lr)
             print('Running evaluation...')
             val_loss = evaluate(corpus.get_docs('valid', device))
             print('-' * 89)
