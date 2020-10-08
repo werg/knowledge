@@ -17,7 +17,7 @@ class KnowledgeBase(nn.Module):
 
         # matrix that acts like a digit system for converting indices to flat view indices
         # dim:
-        self.flat_converter = torch.unsqueeze(torch.tensor([self.resolution ** i
+        self.flat_converter = torch.unsqueeze(torch.tensor([float(self.resolution ** i)
                                                             for i in reversed(range(query_size))]), 1)
 
         nm = [[]]
@@ -54,8 +54,8 @@ class KnowledgeBase(nn.Module):
             # note we don't do modulo until here in order to wrap around the right way
             # in the wraparound case, retrieve the zeroeth element, but still compute distance weights
             # based on un-wrapped values (see below)
-            flat_indices = torch.squeeze(torch.matmul(indices.long(),
-                                                      self.flat_converter)) % self.resolution
+            flat_indices = torch.squeeze(torch.matmul(indices,
+                                                      self.flat_converter).long()) % self.resolution
 
             values = torch.index_select(self.storage_flat_view, 0, flat_indices)
 
