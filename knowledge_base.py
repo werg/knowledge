@@ -41,7 +41,7 @@ class KnowledgeBase(nn.Module):
             # replicate so we can put it through the neighbor map (getting ceil / bot in all permutations)
             replicated_query = torch.unsqueeze(scaled_and_wrapped, 1).expand(-1, 2 ** self.query_size).T
             print(replicated_query.device)
-            print(indices.device)
+            print(self.neighbor_map.device)
             indices = torch.round(self.neighbor_map + replicated_query)
 
             # note we don't do modulo until here in order to wrap around the right way
