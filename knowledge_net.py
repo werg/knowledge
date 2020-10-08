@@ -29,24 +29,24 @@ class KnowledgeRNN(nn.Module):
         super(KnowledgeRNN, self).__init__()
 
         self.ntokens = ntokens
-        self.drop = nn.Dropout(dropout)
+        self.add_module('drop', nn.Dropout(dropout))
 
         self.input_embed_size = input_embed_size
-        self.encoder = nn.Embedding(ntokens, input_embed_size)
+        self.add_module("encoder", nn.Embedding(ntokens, input_embed_size))
 
         query_input_size = state_size + input_embed_size
-        self.query_net = kb.KnowledgeQueryNet(query_input_size,
-                                              hidden_size=query_input_size,
-                                              query_size=query_size,
-                                              value_size=value_size,
-                                              kb=knowledge_base)
+        self.add_module("query_net", kb.KnowledgeQueryNet(query_input_size,
+                                                          hidden_size=query_input_size,
+                                                          query_size=query_size,
+                                                          value_size=value_size,
+                                                          kb=knowledge_base))
         self.lstm_input_size = input_embed_size + self.query_net.value_size
 
         self.state_size = state_size
-        self.lstm_layer = nn.LSTMCell(self.lstm_input_size, self.state_size)
+        self.add_module("lstm_layer", nn.LSTMCell(self.lstm_input_size, self.state_size))
 
         self.decoder_input_size = self.state_size + input_embed_size + self.query_net.value_size
-        self.decoder = nn.Linear(self.decoder_input_size, ntokens)
+        self.add_module("decoder", nn.Linear(self.decoder_input_size, ntokens))
 
         self.init_weights()
 
@@ -71,7 +71,7 @@ class KnowledgeRNN(nn.Module):
             squeezed_hx = hx.view(self.state_size)
             squeezed_i = i.view(self.input_embed_size)
             query_val = self.query_net(torch.cat((squeezed_hx,
-                                                  squeezed_i)))
+                                                  squeezed_i)).to(device))
 
             lstm_input = torch.cat((squeezed_i, query_val)).view(1,-1)
             hx, cx = self.lstm_layer(lstm_input, (hx, cx))
@@ -166,11 +166,10 @@ def run(epochs=100,
         value_size=80,
         query_size=40,
         lr=20,
-        corpus=data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')):
+        data_path='./data/wikitext-2-raw/wiki.{0}.raw'):
     best_val_loss = None
-    #corpus = data.Corpus('./data/wikitext-103-raw/wiki.{0}.raw')
-    corpus = data.Corpus('./data/wikitext-2-raw/wiki.{0}.raw')
-    #corpus = Corpus('./wikitext-2-raw/wiki.{0}.raw')
+    corpus=data.Corpus(data_path)
+
     ntokens = len(corpus.dictionary)
     train_data = corpus.get_docs('train', device)
     # At any point you can hit Ctrl + C to break out of training early.
@@ -203,6 +202,7 @@ def run(epochs=100,
         print('-' * 89)
         print('Exiting from training early')
 
+data_path_103 = './data/wikitext-103-raw/wiki.{0}.raw'
 
 if __name__ == '__main__':
     run(epochs=2,

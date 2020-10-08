@@ -66,7 +66,7 @@ class KnowledgeBase(nn.Module):
 class KnowledgeLayer(nn.Module):
     def __init__(self, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeLayer, self).__init__()
-        self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
+        self.add_module('kb', kb or KnowledgeBase(query_size, value_size, resolution))
 
     def forward(self, query):
         return self.kb(query)
@@ -76,12 +76,12 @@ class KnowledgeQueryNet(nn.Module):
     def __init__(self, input_size, hidden_size=50, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeQueryNet, self).__init__()
 
-        self.knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
-        self.model = nn.Sequential(
+        self.add_module('knowledge_layer', KnowledgeLayer(query_size, value_size, resolution, kb))
+        self.add_module('model', nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, query_size),
-            self.knowledge_layer)
+            self.knowledge_layer))
 
         self.value_size = self.knowledge_layer.kb.value_size
 
