@@ -87,7 +87,10 @@ class KnowledgeRNN(nn.Module):
         # decoded = decoded.view(-1, self.ntokens)
         return F.log_softmax(decoded, dim=1)
 
-
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        self.query_net = self.query_net.to(*args, **kwargs)
+        return self
 
     def init_hidden(self):
         # todo: investigate this thing

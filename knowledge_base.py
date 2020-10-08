@@ -30,6 +30,15 @@ class KnowledgeBase(nn.Module):
 
         self.neighbor_map = torch.tensor(nm)
 
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        self.storage = self.storage.to(*args, **kwargs)
+        self.neighbor_map = self.neighbor_map.to(*args, **kwargs)
+        rows = self.resolution**self.query_size
+        self.storage_flat_view = self.storage.view(rows, self.value_size)
+        self.flat_converter = self.flat_converter.to(*args, **kwargs)
+        return self
+
     def forward(self, query):
         with torch.no_grad():
             base = torch.floor(query)
@@ -40,8 +49,6 @@ class KnowledgeBase(nn.Module):
 
             # replicate so we can put it through the neighbor map (getting ceil / bot in all permutations)
             replicated_query = torch.unsqueeze(scaled_and_wrapped, 1).expand(-1, 2 ** self.query_size).T
-            print(replicated_query.device)
-            print(self.neighbor_map.device)
             indices = torch.round(self.neighbor_map + replicated_query)
 
             # note we don't do modulo until here in order to wrap around the right way
@@ -73,25 +80,34 @@ class KnowledgeLayer(nn.Module):
     def forward(self, query):
         return self.kb(query)
 
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        self.kb = self.kb.to(*args, **kwargs)
+        return self
 
 class KnowledgeQueryNet(nn.Module):
     def __init__(self, input_size, hidden_size=50, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeQueryNet, self).__init__()
 
-        self.add_module('knowledge_layer', KnowledgeLayer(query_size, value_size, resolution, kb))
+        knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
         self.add_module('model', nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, query_size),
-            self.knowledge_layer))
+            knowledge_layer))
 
-        self.value_size = self.knowledge_layer.kb.value_size
+        self.value_size = knowledge_layer.kb.value_size
 
     def forward(self, input):
         return self.model(input)
 
     def init_weights(self):
         self.model.apply(init_weights)
+
+    def to(self, *args, **kwargs):
+        self = super().to(*args, **kwargs)
+        self.model = nn.Sequential(*[item.to(*args, **kwargs) for item in self.model])
+        return self
 
 # TODO: handle batch slice
 initrange = 0.1
