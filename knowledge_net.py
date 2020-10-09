@@ -131,8 +131,10 @@ def train(model, train_data, lr):
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
+        # to do: do we iterate over them all here??
         for p in model.parameters():
-            p.data.add_(p.grad, alpha=-lr)
+            if p.requires_grad:
+                p.data.add_(p.grad, alpha=-lr)
 
         total_loss += loss.item() / len(doc)
 
