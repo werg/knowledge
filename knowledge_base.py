@@ -9,16 +9,16 @@ class KnowledgeBase(nn.Module):
         self.value_size = value_size
 
         # shape: resolution^query_size x value_size
-        self.storage = torch.randn([resolution for _ in range(query_size)] + [value_size])
+        self.register_buffer('storage', torch.randn([resolution for _ in range(query_size)] + [value_size]))
 
         # shape: (resolution**query_size) x value_size
         rows = resolution**query_size
-        self.storage_flat_view = self.storage.view(rows, value_size)
+        self.register_buffer('storage_flat_view', self.storage.view(rows, value_size))
 
         # matrix that acts like a digit system for converting indices to flat view indices
         # dim:
-        self.flat_converter = torch.unsqueeze(torch.tensor([float(self.resolution ** i)
-                                                            for i in reversed(range(query_size))]), 1)
+        self.register_buffer('flat_converter', torch.unsqueeze(torch.tensor([float(self.resolution ** i)
+                                                                             for i in reversed(range(query_size))]), 1))
 
         nm = [[]]
         for i in range(query_size):
@@ -28,7 +28,7 @@ class KnowledgeBase(nn.Module):
             # towards the edges of the cube we are in
             nm = [[0.4999999] + a for a in nm] + [[-0.4999999] + a for a in nm]
 
-        self.neighbor_map = torch.tensor(nm)
+        self.register_buffer('neighbor_map', torch.tensor(nm))
 
     def to(self, *args, **kwargs):
         self = super().to(*args, **kwargs)
