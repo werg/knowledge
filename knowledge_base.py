@@ -40,13 +40,14 @@ class KnowledgeBase(nn.Module):
         return self
 
     def forward(self, query):
-        with torch.no_grad():
-            base = torch.floor(query)
-            # this is just base-wrapped, i.e. the values that "stick out" beyond the last index
-            # are maintained.
-            # unlike modulo, this also works correctly for negative numbers
-            scaled_and_wrapped = (query - base) * self.resolution
+        base = torch.floor(query)
+        # this is just base-wrapped, i.e. the values that "stick out" beyond the last index
+        # are maintained.
+        # unlike modulo, this also works correctly for negative numbers
+        scaled_and_wrapped = (query - base) * self.resolution
 
+
+        with torch.no_grad():
             # replicate so we can put it through the neighbor map (getting ceil / bot in all permutations)
             replicated_query = torch.unsqueeze(scaled_and_wrapped, 1).expand(-1, 2 ** self.query_size).T
             indices = torch.round(self.neighbor_map + replicated_query)
@@ -75,10 +76,12 @@ class KnowledgeBase(nn.Module):
 class KnowledgeLayer(nn.Module):
     def __init__(self, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeLayer, self).__init__()
-        self.add_module('kb', kb or KnowledgeBase(query_size, value_size, resolution))
+        self.value_size = value_size
+        self.register_buffer('kb', kb or KnowledgeBase(query_size, value_size, resolution))
 
     def forward(self, query):
         return self.kb(query)
+        #return query
 
     def to(self, *args, **kwargs):
         self = super().to(*args, **kwargs)
@@ -89,24 +92,25 @@ class KnowledgeQueryNet(nn.Module):
     def __init__(self, input_size, hidden_size=50, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeQueryNet, self).__init__()
 
-        knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
-        self.add_module('model', nn.Sequential(
+        self.knowledge_layer = KnowledgeLayer(query_size, value_size, resolution, kb)
+        self.add_module('preprocess', nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, query_size),
-            knowledge_layer))
+            nn.Linear(hidden_size, query_size)))
 
-        self.value_size = knowledge_layer.kb.value_size
+        #self.value_size = self.knowledge_layer.kb.value_size
+        self.value_size = value_size
 
     def forward(self, input):
-        return self.model(input)
+        return self.knowledge_layer(self.preprocess(input))
 
     def init_weights(self):
-        self.model.apply(init_weights)
+        self.preprocess.apply(init_weights)
 
     def to(self, *args, **kwargs):
         self = super().to(*args, **kwargs)
-        self.model = nn.Sequential(*[item.to(*args, **kwargs) for item in self.model])
+        self.preprocess = nn.Sequential(*[item.to(*args, **kwargs) for item in self.preprocess])
+        self.knowledge_layer.to(*args, **kwargs)
         return self
 
 # TODO: handle batch slice
