@@ -77,7 +77,7 @@ class KnowledgeLayer(nn.Module):
     def __init__(self, query_size=40, value_size=80, resolution=4, kb=None):
         super(KnowledgeLayer, self).__init__()
         self.value_size = value_size
-        self.register_buffer('kb', kb or KnowledgeBase(query_size, value_size, resolution))
+        self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
 
     def forward(self, query):
         return self.kb(query)

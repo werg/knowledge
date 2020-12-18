@@ -107,13 +107,14 @@ class KnowledgeRNN(nn.Module):
 criterion = nn.NLLLoss()
 #criterion = nn.CrossEntropyLoss()
 
-def train(model, train_data, lr):
+def train(model, train_data, lr, doc_size=1000):
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
     start_time = time.time()
 
     for iteration, doc in enumerate(itertools.islice(train_data, 1000)):
+        doc = doc[:doc_size]
         gc.collect()
         # train_data documents must contain end symbol
         # don't predict on end symbol and don't predict the first symbol
@@ -125,7 +126,7 @@ def train(model, train_data, lr):
 
         output = model(input)
 
-        print(output.shape, targets.shape)
+        #print(output.shape, targets.shape)
         loss = criterion(output, targets)
         loss.backward()
 
@@ -134,8 +135,6 @@ def train(model, train_data, lr):
         # to do: do we iterate over them all here??
 
         for p in model.parameters():
-            print("adjusting:")
-            print(p)
             if p.requires_grad:
                 p.data.add_(p.grad, alpha=-lr)
 
@@ -153,7 +152,7 @@ def train(model, train_data, lr):
             start_time = time.time()
 
 
-def evaluate(data_source):
+def evaluate(data_source, model):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0.
@@ -192,7 +191,7 @@ def run(epochs=100,
             epoch_start_time = time.time()
             train(model, train_data, lr)
             print('Running evaluation...')
-            val_loss = evaluate(corpus.get_docs('valid', device))
+            val_loss = evaluate(corpus.get_docs('valid', device), model)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
