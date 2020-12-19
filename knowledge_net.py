@@ -113,7 +113,7 @@ def train(model, train_data, lr, doc_size=1000):
     total_loss = 0.
     start_time = time.time()
 
-    for iteration, doc in enumerate(itertools.islice(train_data, 1000)):
+    for iteration, doc in enumerate(itertools.islice(train_data, 300)):
         doc = doc[:doc_size]
         gc.collect()
         # train_data documents must contain end symbol
@@ -152,18 +152,23 @@ def train(model, train_data, lr, doc_size=1000):
             start_time = time.time()
 
 
-def evaluate(data_source, model):
+def evaluate(data_source, model, idx2word):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0.
 
     with torch.no_grad():
         for iteration, doc in enumerate(itertools.islice(data_source, 1000)):
+            doc = doc[:500]
             gc.collect()
             input = doc[:-1]
             targets = doc[1:]
             output = model(input)
             total_loss += criterion(output, targets).item() / len(input)
+
+        print(' '.join([idx2word[t] for t in targets[:45]]))
+        print(' '.join([idx2word[i] for i in torch.argmax(output, dim=1)[:45]]))
+
     return total_loss
 
 
@@ -191,7 +196,7 @@ def run(epochs=100,
             epoch_start_time = time.time()
             train(model, train_data, lr)
             print('Running evaluation...')
-            val_loss = evaluate(corpus.get_docs('valid', device), model)
+            val_loss = evaluate(corpus.get_docs('valid', device), model, corpus.dictionary.idx2word)
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
