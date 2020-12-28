@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 
 class KnowledgeBase(nn.Module):
-    def __init__(self, query_size, value_size, resolution):
+    def __init__(self, query_size, value_size, resolution, device=None):
         super(KnowledgeBase, self).__init__()
         self.query_size = query_size
         self.resolution = resolution
         self.value_size = value_size
 
         # shape: resolution^query_size x value_size
-        self.register_buffer('storage', torch.randn([resolution for _ in range(query_size)] + [value_size]))
+        self.register_buffer('storage', torch.randn([resolution for _ in range(query_size)] + [value_size], device=device, dtype=torch.half))
 
         # shape: (resolution**query_size) x value_size
         rows = resolution**query_size
@@ -18,7 +18,7 @@ class KnowledgeBase(nn.Module):
         # matrix that acts like a digit system for converting indices to flat view indices
         # dim:
         self.register_buffer('flat_converter', torch.unsqueeze(torch.tensor([float(self.resolution ** i)
-                                                                             for i in reversed(range(query_size))]), 1))
+                                                                             for i in reversed(range(query_size))], device=device), 1))
     def to(self, *args, **kwargs):
         self = super().to(*args, **kwargs)
         self.storage = self.storage.to(*args, **kwargs)
