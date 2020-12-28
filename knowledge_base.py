@@ -19,21 +19,9 @@ class KnowledgeBase(nn.Module):
         # dim:
         self.register_buffer('flat_converter', torch.unsqueeze(torch.tensor([float(self.resolution ** i)
                                                                              for i in reversed(range(query_size))]), 1))
-
-        nm = [[]]
-        for i in range(query_size):
-            # this gets used to find all the corners of the surrounding hypercube
-            # (where the corners' coordinates are integers) for any point
-            # we choose a value shy of 0.5, to always make it round
-            # towards the edges of the cube we are in
-            nm = [[0.4999999] + a for a in nm] + [[-0.4999999] + a for a in nm]
-
-        self.register_buffer('neighbor_map', torch.tensor(nm))
-
     def to(self, *args, **kwargs):
         self = super().to(*args, **kwargs)
         self.storage = self.storage.to(*args, **kwargs)
-        self.neighbor_map = self.neighbor_map.to(*args, **kwargs)
         rows = self.resolution**self.query_size
         self.storage_flat_view = self.storage.view(rows, self.value_size)
         self.flat_converter = self.flat_converter.to(*args, **kwargs)
@@ -48,23 +36,32 @@ class KnowledgeBase(nn.Module):
 
 
         with torch.no_grad():
-            # replicate so we can put it through the neighbor map (getting ceil / bot in all permutations)
-            replicated_query = torch.unsqueeze(scaled_and_wrapped, 1).expand(-1, 2 ** self.query_size).T
-            indices = torch.round(self.neighbor_map + replicated_query)
+
+            anchor_index = torch.round(scaled_and_wrapped)
+            # get the direction of deviation from anchor_index in every dimension
+            deviation = scaled_and_wrapped - anchor_index
+            simplex_directions = torch.sign(deviation)
+            # the diagonal contains the direction in which each vertex of simplex deviates from anchor
+            diag_directions = torch.diag_embed(simplex_directions)
+            # add zero for the anchor
+            padded_directions = F.pad(diag_directions, (0,0, 0,1), "constant", 0)
+            anchor_replicated = anchor_index.view(-1, 1, self.query_size).expand_as(padded_directions)
+
+            indices = anchor_replicated + padded_directions
 
             # note we don't do modulo until here in order to wrap around the right way
             # in the wraparound case, retrieve the zeroeth element, but still compute distance weights
             # based on un-wrapped values (see below)
-            flat_indices = torch.squeeze(torch.matmul(indices,
-                                                      self.flat_converter).long()) % self.resolution
+            flat_indices = ((torch.matmul(indices,
+                                         self.flat_converter).long()) % self.resolution).view(-1)
 
-            values = torch.index_select(self.storage_flat_view, 0, flat_indices)
+            values = torch.index_select(self.storage_flat_view, 0, flat_indices).view(-1, self.query_size + 1, self.value_size)
 
         # nearest voxel value weights: manhattan distance to corners of hypercube between them
-        weights = torch.sum(1 - (indices - scaled_and_wrapped).abs(), dim=1)
+        weights = torch.sum(1 - (indices - scaled_and_wrapped.view(-1,1,self.query_size).expand_as(indices)).abs(), dim=2)
 
         # multiply weights by values and divide by query_size
-        result = torch.squeeze(torch.matmul(values.T, weights)) / self.query_size
+        result = torch.squeeze(torch.bmm(weights.unsqueeze(1), values.float()) , dim=1)/ self.query_size
 
         return result
 
@@ -87,6 +84,20 @@ class KnowledgeLayer(nn.Module):
         self = super().to(*args, **kwargs)
         self.kb = self.kb.to(*args, **kwargs)
         return self
+
+
+class MultiHeadKnowledgeLayer(nn.Module):
+    def __init__(self, heads, query_size=40, value_size=80, resolution=4, kb=None):
+        super(MultiHeadKnowledgeLayer, self).__init__()
+        self.heads = heads
+        self.value_size = value_size
+        self.kb = kb or KnowledgeBase(query_size, value_size, resolution)
+        self.query_size = query_size
+
+    def forward(self, query):
+        query = query.view(-1, self.query_size)
+        return self.kb(query).view(-1, self.value_size * self.heads)
+
 
 class KnowledgeQueryNet(nn.Module):
     def __init__(self, input_size, hidden_size=50, query_size=40, value_size=80, resolution=4, kb=None):
